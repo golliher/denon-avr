@@ -1,83 +1,120 @@
 package main
+
 // Simple program to send commands to Denon AVR and get their result
 
 import (
-	// "bufio"
+	"bufio"
 	"fmt"
 	"net"
 	"os"
-	// "time"
+	"time"
 )
 
-func sendCmd(cmd string, conn net.Conn)  {
+var (
+	gr      chan string // global receiving channel for information coming from the AVR
+	conn    net.Conn    // global network connection to the AVR
+	debug   = false
+	verbose = false
+)
 
+func sendCmd(cmd string) {
+	if verbose {
+		fmt.Println("Sending: ", cmd)
+	}
 
-	fmt.Println("Connected")
-	fmt.Println("Sending: ", cmd)
 	cmd = cmd + "\r"
 	fmt.Fprintf(conn, cmd)
 
+	go receiver()
 
-	// Bug: it's got to be an anti-pattern to have to pass connection into a routine like this.
-	
-	// Bug: some commands return nothing for example sending MUON when mut is already on.  Need a timeout?
-
-	// This is a bug because there can be more than one line to read.  For example, HD?
-	// How do I know when it's done sending results?
-
-
-	// Commenting to prevent hands when MUON when MUON
-	// status, err := bufio.NewReader(conn).ReadString('\r')
-	// if err != nil {
-	// 	fmt.Println("Error reading result")
-	// }
-	// fmt.Println("result",status)
-
-
-	// return status
 }
 
-func noop() {
-	fmt.Println("noop")
-	return 
+func receiver() {
+	if debug {
+		fmt.Println("Receiver started")
+	}
+
+	status, err := bufio.NewReader(conn).ReadString('\r')
+	gr <- status
+	for err == nil { // There must be more information..keep reading.
+		status, err = bufio.NewReader(conn).ReadString('\r')
+		gr <- status
+	}
+
+	close(gr)
+
 }
 
+func printReceived() {
+	if debug {
+		fmt.Println("printReceived started")
+	}
+	for recievedMsg := range gr {
+		if recievedMsg != "" {
+			fmt.Println("received: ", recievedMsg)
+		} else {
+			if verbose {
+				fmt.Println("Received no result.")
+			}
+		}
+	}
 
-func main() {
+}
 
-	
-	conn, err := net.Dial("tcp", "192.168.4.2:23")
+func init() {
+	if debug {
+		fmt.Print("Initilizing global channels.")
+	}
+	gr = make(chan string)
+
+	if debug {
+		fmt.Print("Connecting..")
+	}
+	lconn, err := net.Dial("tcp", "192.168.4.2:23")
+	lconn.SetDeadline(time.Now().Add(300 * time.Millisecond)) // API spec says results should take no more than 200ms
 	if err != nil {
 		fmt.Println("Connection failed")
 		os.Exit(1)
-	} 
-	
-	
-	// cmd_seq := []string{"MU?\r", "MUOFF\r", "MU?\r","MUON\r","MU?\r"}
+	}
+	if debug {
+		fmt.Println("connected.")
+	}
+	conn = lconn // Probably a better pattern for this..
+
+}
+
+func main() {
+
+	// cmd_seq := []string{"MU?", "MUOFF", "MU?","MUON","MU?"}
 	cmd_seq := os.Args[1:]
 
-	for _,cmd := range cmd_seq {
+	// BUG: Only the first command in the cmd_seq actually works
+	for _, cmd := range cmd_seq {
 		switch cmd {
-		case "xboxon": { 
-				sendCmd("MUOFF",conn)
-				sendCmd("MV335",conn)
-				sendCmd("SIGAME",conn)
-				
+		case "xboxon":
+			{
+				sendCmd("MUOFF")
+				sendCmd("MV335")
+				sendCmd("SIGAME")
 			}
-		case "xboxoff": { 
-				sendCmd("MUOFF",conn)
-				sendCmd("SIMPLAY",conn)
+		case "xboxoff":
+			{
+				sendCmd("MUOFF")
+				sendCmd("SIMPLAY")
 			}
-		case "appletv": { 
-				sendCmd("MUOFF",conn)
-				sendCmd("SIMPLAY",conn)
+		case "appletv":
+			{
+				sendCmd("MUOFF")
+				sendCmd("SIMPLAY")
 			}
 
 		default:
-			sendCmd(cmd, conn)
+			sendCmd(cmd)
+			printReceived()
+
 		}
 	}
-	conn.Close()
 
+	conn.Close()
 
 }
