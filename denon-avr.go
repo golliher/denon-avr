@@ -25,8 +25,6 @@ func sendCmd(cmd string) {
 	cmd = cmd + "\r"
 	fmt.Fprintf(conn, cmd)
 
-	go receiver()
-
 }
 
 func receiver() {
@@ -40,8 +38,6 @@ func receiver() {
 		status, err = bufio.NewReader(conn).ReadString('\r')
 		gr <- status
 	}
-
-	close(gr)
 
 }
 
@@ -81,15 +77,19 @@ func init() {
 	}
 	conn = lconn // Probably a better pattern for this..
 
+	go receiver()
+
 }
 
 func main() {
 
 	// cmd_seq := []string{"MU?", "MUOFF", "MU?","MUON","MU?"}
-	cmd_seq := os.Args[1:]
+	cmdSeq := os.Args[1:]
+
+	defer close(gr)
 
 	// BUG: Only the first command in the cmd_seq actually works
-	for _, cmd := range cmd_seq {
+	for _, cmd := range cmdSeq {
 		switch cmd {
 		case "xboxon":
 			{
