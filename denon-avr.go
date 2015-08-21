@@ -14,7 +14,7 @@ var (
 	gr      chan string // global receiving channel for information coming from the AVR
 	conn    net.Conn    // global network connection to the AVR
 	debug   = false
-	verbose = false
+	verbose = true
 )
 
 func sendCmd(cmd string) {
@@ -39,6 +39,10 @@ func receiver() {
 		gr <- status
 	}
 
+	if debug {
+		fmt.Println("Receiver has stopped.")
+	}
+
 }
 
 func printReceived() {
@@ -55,11 +59,12 @@ func printReceived() {
 		}
 	}
 
+	fmt.Println("Done printing received channel.")
 }
 
 func init() {
 	if debug {
-		fmt.Print("Initilizing global channels.")
+		fmt.Println("Initilizing global channels.")
 	}
 	gr = make(chan string)
 
@@ -67,7 +72,7 @@ func init() {
 		fmt.Print("Connecting..")
 	}
 	lconn, err := net.Dial("tcp", "192.168.4.2:23")
-	lconn.SetDeadline(time.Now().Add(300 * time.Millisecond)) // API spec says results should take no more than 200ms
+
 	if err != nil {
 		fmt.Println("Connection failed")
 		os.Exit(1)
@@ -78,6 +83,7 @@ func init() {
 	conn = lconn // Probably a better pattern for this..
 
 	go receiver()
+	go printReceived()
 
 }
 
@@ -87,8 +93,8 @@ func main() {
 	cmdSeq := os.Args[1:]
 
 	defer close(gr)
+	defer conn.Close()
 
-	// BUG: Only the first command in the cmd_seq actually works
 	for _, cmd := range cmdSeq {
 		switch cmd {
 		case "xboxon":
@@ -106,15 +112,39 @@ func main() {
 			{
 				sendCmd("MUOFF")
 				sendCmd("SIMPLAY")
+				sendCmd("Z2MPLAY")
+			}
+		case "ps3on":
+			{
+				sendCmd("MUOFF")
+				sendCmd("SIBD")
+			}
+		case "radio":
+			{
+				sendCmd("MUOFF")
+				sendCmd("SIHDRADIO")
+			}
+		case "radioall":
+			{
+				sendCmd("MUOFF")
+				sendCmd("SIHDRADIO")
+				sendCmd("MV23")
+				sendCmd("Z2HDRADIO")
+
 			}
 
 		default:
-			sendCmd(cmd)
-			printReceived()
-
+			go sendCmd(cmd)
+			// DENON API says we will have an answer after 200ms
+			time.Sleep(210 * time.Millisecond)
 		}
-	}
 
-	conn.Close()
+		// Do we need to wait between sending commands?
+		// Probably not, but makes it easier to see whats going on during dev
+		if debug {
+			time.Sleep(1000 * time.Millisecond)
+		}
+
+	}
 
 }
