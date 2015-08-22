@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,7 @@ var (
 )
 
 func sendCmd(cmd string) {
+	cmd = strings.ToUpper(cmd)
 	if verbose {
 		fmt.Println("Sending: ", cmd)
 	}
