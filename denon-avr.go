@@ -134,6 +134,13 @@ func main() {
 				sendCmd("Z2HDRADIO")
 
 			}
+		case "off":
+			{
+				sendCmd("MV00")
+				sendCmd("Z2OFF")
+				sendCmd("Z3OFF")
+				sendCmd("PWSTANDBY")
+			}
 
 		default:
 			go sendCmd(cmd)
