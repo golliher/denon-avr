@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -12,30 +13,35 @@ var (
 	allClients map[*Client]int
 	gr         chan string // global receiving channel for information coming from the AVR
 	avr_conn   net.Conn    // global network connection to the AVR
-	debug      = true
-	verbose    = true
+	debug      = false
+	verbose    = false
 )
 
-func sendCmd(cmd string) {
-
-	cmd = strings.ToUpper(cmd)
+func print_verbose(m ...interface{}) {
 	if verbose {
-		fmt.Println("Sending: ", cmd)
+		fmt.Println(m...)
 	}
+}
+
+func print_debug(m ...interface{}) {
+	if debug {
+		fmt.Println(m...)
+	}
+}
+
+func sendCmd(cmd string) {
+	cmd = strings.ToUpper(cmd)
+	print_verbose("   Sending to AVR: ", cmd)
 
 	if cmd[len(cmd)-1:] != "\r" {
 		cmd = cmd + "\r"
-		fmt.Println("Adding slash r to command")
 	}
 
 	fmt.Fprintf(avr_conn, cmd)
-
 }
 
 func receiver() {
-	if debug {
-		fmt.Println("Receiver started")
-	}
+	print_verbose("Receiver started")
 
 	status, err := bufio.NewReader(avr_conn).ReadString('\r')
 	gr <- status
@@ -43,59 +49,46 @@ func receiver() {
 		status, err = bufio.NewReader(avr_conn).ReadString('\r')
 		gr <- status
 	}
-
-	if debug {
-		fmt.Println("Receiver has stopped.")
-	}
-
+	print_verbose("Receiver has stopped.")
 }
 
 func init() {
-	if debug {
-		fmt.Println("Initilizing global channels.")
-	}
+
+	flag.BoolVar(&verbose, "v", false, "Enable verbose output")
+	flag.Parse()
+
+	print_debug("Initilizing global channels.")
 	gr = make(chan string)
 
-	if debug {
-		fmt.Print("Connecting to AVR..")
-	}
+	print_verbose("Connecting to AVR.")
 	lconn, err := net.Dial("tcp", "192.168.4.2:23")
-
 	if err != nil {
-		fmt.Println("Connection failed")
+		fmt.Println("Connection to AVR failed. Exiting.")
 		os.Exit(1)
 	}
-	if debug {
-		fmt.Println("connected.")
-	}
-	avr_conn = lconn // Probably a better pattern for this..
-
+	print_verbose("...connected to AVR.")
+	avr_conn = lconn
 	go receiver()
 }
 
 func printReceived() {
-	if debug {
-		fmt.Println("printReceived started")
-	}
+
+	print_debug("printReceived started")
+
 	for recievedMsg := range gr {
 		if recievedMsg != "" {
-			fmt.Println("received from AVR: ", recievedMsg)
+			print_verbose("Received from AVR: ", recievedMsg)
 			for clientList, _ := range allClients {
 				clientList.outgoing <- recievedMsg
 			}
 
 		} else {
-			if verbose {
-				fmt.Println("Received no result.")
-			}
+			print_verbose("Received no result.")
 		}
 	}
-
-	fmt.Println("Done printing received channel.")
+	print_debug("Done printing received channel.")
 
 }
-
-/////
 
 type Client struct {
 	// incoming chan string
@@ -113,13 +106,10 @@ func (client *Client) Read() {
 			if client.connection != nil {
 				client.connection.outgoing <- line
 			}
-			fmt.Println(line)
 			sendCmd(line)
-
 		} else {
 			break
 		}
-
 	}
 
 	client.conn.Close()
@@ -176,10 +166,10 @@ func main() {
 			if clientList.connection == nil {
 				client.connection = clientList
 				clientList.connection = client
-				fmt.Println("Connected")
+				print_verbose("CLient connected")
 			}
 		}
 		allClients[client] = 1
-		fmt.Println(len(allClients))
+		print_debug(len(allClients))
 	}
 }
